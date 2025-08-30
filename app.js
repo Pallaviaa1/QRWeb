@@ -207,6 +207,58 @@ app.post('/add-credentials', async (req, res) => {
     }
 });
 
+app.post('/admin/login', async (req, res) => {
+    const { username, password } = req.body;
+
+    try {
+        // --- Input validation ---
+        if (!username || !password) {
+            return res.status(400).json({ success: false, error: 'Username and password are required' });
+        }
+
+        const pool = await getConnection(); // Same as in /admin/:id
+
+        // Explicitly check which DB is being used (debug line)
+        const dbCheck = await pool.request().query('SELECT DB_NAME() AS CurrentDB');
+        console.log('Connected to DB:', dbCheck.recordset[0].CurrentDB);
+
+        // --- Fetch admin record by username ---
+        const result = await pool.request()
+            .input('Username', sql.NVarChar, username)
+            .query(`
+                SELECT AdminID, Username, PasswordHash 
+                FROM dbo.AdminUsers 
+                WHERE Username = @Username
+            `);
+
+        if (result.recordset.length === 0) {
+            return res.status(400).json({ success: false, error: 'Admin not found' });
+        }
+
+        const admin = result.recordset[0];
+
+        // --- Compare passwords ---
+        const isMatch = await bcrypt.compare(password, admin.PasswordHash);
+        if (!isMatch) {
+            return res.status(400).json({ success: false, error: 'Invalid password' });
+        }
+
+        // --- Return success with basic admin details ---
+        res.status(200).json({
+            success: true,
+            message: 'Login successful',
+            admin: {
+                adminId: admin.AdminID,
+                username: admin.Username
+            }
+        });
+
+    } catch (err) {
+        console.error('Error during admin login:', err.message);
+        res.status(500).json({ success: false, error: 'Server error', message: err.message });
+    }
+});
+
 
 app.put('/admin/update', async (req, res) => {
     const { adminId, oldPassword, newUsername, newPassword } = req.body;
@@ -320,7 +372,7 @@ app.get('/admin/:id', async (req, res) => {
 
 /* localhost:6100/admin/update
 {
-    "adminId":"1",  "newUsername":"", "oldPassword":"admin@123", "newPassword":"admin@123"
+    "adminId":"1",  "newUsername":"admin", "oldPassword":"admin@123", "newPassword":"admin@123"
     put
 }
  */
