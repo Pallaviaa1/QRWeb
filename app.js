@@ -64,6 +64,10 @@ app.get('/data', async (req, res) => {
 
         const limits = limitsResult.recordsets.flat(); // upper/lower limits
 
+        // If no limits found, product ID may be invalid
+        if (!limits || limits.length === 0) {
+            return res.status(400).json({ success: false, error: 'Product ID not found or no limits available' });
+        }
         // 2) Get actual measurements
         const dataResult = await pool.request()
             .input('productoid', sql.VarChar(24), productId)
@@ -81,7 +85,7 @@ app.get('/data', async (req, res) => {
 
     } catch (err) {
         console.error('Stored procedure error:', err.message);
-        res.status(500).send('Server error');
+        res.status(500).send('Server error', err.message);
     }
 });
 
@@ -324,6 +328,10 @@ app.get('/admin/:id', async (req, res) => {
 /* 
 localhost:6100/admin/1
 get
+ */
+
+/* exec sp_cargaTrazabilidad3 '806031','2025-08-25 10:00:00.000'
+   exec sp_CXPinfo '806031'
  */
 
 app.listen(port, () => {
